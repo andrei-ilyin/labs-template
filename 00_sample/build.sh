@@ -5,7 +5,7 @@ set -e
 set -o pipefail
 
 CXX="clang++"
-CXX_FLAGS="--std=c++17 -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -DIGNORE_SOLUTION_MAIN"
+CXX_FLAGS="-std=c++1z -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -DIGNORE_SOLUTION_MAIN"
 CXX_FLAGS_DBG="$CXX_FLAGS -O0"
 CXX_FLAGS_OPT="$CXX_FLAGS -O2"
 CXX_FLAGS_ASAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=address -fsanitize=leak -fsanitize=undefined"
@@ -93,8 +93,14 @@ function build_solution {
         compile_if_missing gmock/gmock-all.cc gmock.o
         compile_if_missing gmock/gmock_main.cc gmock_main.o
 
-        $CXX_CMD $LINK_FLAGS *.o -o $OUT_EXE 2>&1 \
-        | perl -ne 'print if not (/gtest/ or /[a-zA-Z0-9_]+[.]o[:]/)'
+        touch linker_output.log
+        if [[ -n `( \
+                    $CXX_CMD $LINK_FLAGS *.o -o $OUT_EXE 2>&1 \
+                    | perl -ne 'print if not (/gtest/ or /[a-zA-Z0-9_]+[.]o[:]/)' \
+                  ) &>linker_output.log || echo $?` ]]; then
+            remove_paths_from_log linker_output.log;
+            cat linker_output.log && false;
+        fi;
 
         cd - &>/dev/null
     }
@@ -130,7 +136,7 @@ function precompile_libs {
         $CXX_CMD -c $LIBS_DIR/gmock/gmock_main.cc -o gmock_main.o
 
         cd - &>/dev/null
-        
+
         zip -r $PACKAGE_ZIP $2/
         rm -rf $2/
     }
