@@ -19,3 +19,9 @@ zip -r ../$LAB_NAME/package.zip cpplint/ gtest/ gmock/ testerlib/ utils/
 if (( $PRECOMPILE )); then
     ../$LAB_NAME/build.sh --precompile $PWD $PWD/obj $PWD/../$LAB_NAME/package.zip
 fi
+
+# You can comment the following lines if you don't need Yandex.Contest package
+cd ../$LAB_NAME/
+mv package.zip package_zip
+zip -j package-yacontest.zip package_zip build.sh ../common/yacontest/Makefile ../common/yacontest/run_build.sh
+mv package_zip package.zip
