@@ -78,7 +78,7 @@ class TestingSystemInterface:
         for result in detailed_test_results:
             _eprint(_to_log_line(result))
         _eprint("Passed %s out of %s tests" % (
-            str(tests_count), str(tests_passed)))
+            str(tests_passed), str(tests_count)))
         _eprint("Total score: %s out of %s" % (
             str(round(score_gained, 3)), str(round(score_max, 3))))
         stderr.flush()
@@ -88,8 +88,8 @@ class YandexContestInterface(TestingSystemInterface):
     def __init__(self,
                  input_filename="INPUT_FILE_NAME",
                  output_filename="OUTPUT_FILE_NAME",
-                 public_secrets=("PUBLIC_TEST", "PUBLIC_SECRET_HERE"),
-                 private_secrets=("PRIVATE_TEST", "PRIVATE_SECRET_HERE")):
+                 public_secrets=("public", "PUBLIC_SECRET_HERE"),
+                 private_secrets=("private", "PRIVATE_SECRET_HERE")):
         self._input_filename = input_filename
         self._output_filename = output_filename
         self._public_secret = public_secrets

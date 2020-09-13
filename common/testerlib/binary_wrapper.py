@@ -27,9 +27,15 @@
 
 import os
 import platform
-from subprocess import call, TimeoutExpired
+import sys
+from subprocess import call
 from tempfile import TemporaryDirectory
 
+if sys.version_info[1] >= 3:
+    from subprocess import TimeoutExpired
+else:
+    class TimeoutExpired(Exception):
+        pass
 
 def _is_running_on_windows():
     return platform.system() == 'Windows'
