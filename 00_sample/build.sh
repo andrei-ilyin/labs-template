@@ -4,8 +4,8 @@
 set -e
 set -o pipefail
 
-CXX="clang++-10"
-CXX_FLAGS="-std=c++17 -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -DIGNORE_SOLUTION_MAIN"
+CXX="clang++"
+CXX_FLAGS="-std=c++1z -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -Werror -DIGNORE_SOLUTION_MAIN"
 CXX_FLAGS_DBG="$CXX_FLAGS -O0"
 CXX_FLAGS_OPT="$CXX_FLAGS -O2"
 CXX_FLAGS_ASAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=address,leak,undefined -fno-sanitize-recover=all"
