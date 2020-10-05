@@ -74,7 +74,7 @@ class GTestBinaryWrapper:
                             if f.read().strip() != GTEST_TOKEN_SECRET:
                                 raise PermissionError('Token value is wrong!')
 
-                return True
+        return True
 
     def get_test_names(self):
         return self._suitcase_to_tests

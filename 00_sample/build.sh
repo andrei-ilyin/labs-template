@@ -5,10 +5,10 @@ set -e
 set -o pipefail
 
 CXX="clang++"
-CXX_FLAGS="-std=c++1z -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -DIGNORE_SOLUTION_MAIN"
+CXX_FLAGS="-std=c++1z -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -Werror -DIGNORE_SOLUTION_MAIN"
 CXX_FLAGS_DBG="$CXX_FLAGS -O0"
 CXX_FLAGS_OPT="$CXX_FLAGS -O2"
-CXX_FLAGS_ASAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=address -fsanitize=leak -fsanitize=undefined"
+CXX_FLAGS_ASAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=address,leak,undefined -fno-sanitize-recover=all"
 CXX_FLAGS_MSAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=memory"
 
 LINK_FLAGS="-Wl,-z,stack-size=268435456"
@@ -148,7 +148,7 @@ function precompile_libs {
 }
 
 if [[ $1 == "--precompile" ]]; then
-    precompile_libs $@
+    precompile_libs "$@"
 else
-    build_solution $@
+    build_solution "$@"
 fi

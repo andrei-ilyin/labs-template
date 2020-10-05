@@ -104,25 +104,23 @@ std::string RandomString(size_t n, int64_t min = 1, int64_t max = 127);
   ASSERT_DURATION_GE_A(correct_function, user_function, 2)
 
 #define ASSERT_DURATION_GE_A(correct_function, user_function, time_constant) { \
-  auto _correct_start_time = std::chrono::high_resolution_clock::now();        \
+  auto _first_time = std::chrono::high_resolution_clock::now();                \
   correct_function;                                                            \
-  auto _correct_end_time = std::chrono::high_resolution_clock::now();          \
-                                                                               \
-  auto _user_start_time = std::chrono::high_resolution_clock::now();           \
+  auto _second_time = std::chrono::high_resolution_clock::now();               \
   user_function;                                                               \
-  auto _user_end_time = std::chrono::high_resolution_clock::now();             \
+  auto _third_time = std::chrono::high_resolution_clock::now();                \
                                                                                \
-  auto _correct_exec_time =                                                    \
+  auto _author_exec_time =                                                     \
       1 + std::chrono::duration_cast<std::chrono::microseconds>(               \
-          _correct_end_time - _correct_start_time).count();                    \
+          _second_time - _first_time).count();                                 \
   auto _user_exec_time =                                                       \
-      std::chrono::duration_cast<std::chrono::microseconds>(                   \
-          _user_end_time - _user_start_time).count();                          \
+      1 + std::chrono::duration_cast<std::chrono::microseconds>(               \
+          _third_time - _second_time).count();                                 \
                                                                                \
-  if (time_constant * _correct_exec_time <= _user_exec_time) {                 \
+  if (time_constant * _author_exec_time < _user_exec_time) {                   \
     FAIL() << "\tTime limit exceeded.\n\tUser time: "                          \
            << std::to_string(_user_exec_time) << "\n\tAuthor time: "           \
-           << std::to_string(_correct_exec_time);                              \
+           << std::to_string(_author_exec_time);                               \
   }                                                                            \
 }
 
