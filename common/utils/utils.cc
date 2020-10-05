@@ -68,13 +68,13 @@ uint64_t Rand64() {
 }
 
 uint64_t URandom64(uint64_t min, uint64_t max) {
-  uint64_t range_size = max + 1ll - min;
-  return min + static_cast<long long>(Rand64() % range_size);
+  uint64_t range_size = static_cast<uint64_t>(max) - min + 1ll;
+  return min + static_cast<uint64_t>(Rand64() % range_size);
 }
 
 int64_t SRandom64(int64_t min, int64_t max) {
-  uint64_t range_size = max + 1ll - min;
-  return min + static_cast<long long>(Rand64() % range_size);
+  uint64_t range_size = static_cast<uint64_t>(max) - min + 1ll;
+  return min + static_cast<uint64_t>(Rand64() % range_size);
 }
 
 uint32_t URandom32(uint32_t min, uint32_t max) {
@@ -87,6 +87,7 @@ int32_t SRandom32(int32_t min, int32_t max) {
 
 std::vector<int32_t> RandomInt32Array(size_t n, int32_t min, int32_t max) {
   std::vector<int32_t> result;
+  result.reserve(n);
   for (size_t i = 0; i < n; ++i) {
     result.push_back(SRandom32(min, max));
   }
@@ -95,6 +96,7 @@ std::vector<int32_t> RandomInt32Array(size_t n, int32_t min, int32_t max) {
 
 std::vector<uint32_t> RandomUInt32Array(size_t n, uint32_t min, uint32_t max) {
   std::vector<uint32_t> result;
+  result.reserve(n);
   for (size_t i = 0; i < n; ++i) {
     result.push_back(URandom32(min, max));
   }
@@ -103,6 +105,7 @@ std::vector<uint32_t> RandomUInt32Array(size_t n, uint32_t min, uint32_t max) {
 
 std::vector<int64_t> RandomInt64Array(size_t n, int64_t min, int64_t max) {
   std::vector<int64_t> result;
+  result.reserve(n);
   for (size_t i = 0; i < n; ++i) {
     result.push_back(SRandom64(min, max));
   }
@@ -111,6 +114,7 @@ std::vector<int64_t> RandomInt64Array(size_t n, int64_t min, int64_t max) {
 
 std::vector<uint64_t> RandomUInt64Array(size_t n, uint64_t min, uint64_t max) {
   std::vector<uint64_t> result;
+  result.reserve(n);
   for (size_t i = 0; i < n; ++i) {
     result.push_back(URandom64(min, max));
   }
