@@ -12,6 +12,12 @@ else (MINGW)
 endif (MINGW)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(LIBCXX_OPTION "-stdlib=libc++")
+else ()
+    set(LIBCXX_OPTION "")
+endif ()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CODE_COVERAGE_OPTION "-fprofile-instr-generate -fcoverage-mapping")
 else ()
     set(CODE_COVERAGE_OPTION "")
@@ -23,7 +29,7 @@ else ()
     set(SANITIZER_OPTION "")
 endif ()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CODE_COVERAGE_OPTION} ${SANITIZER_OPTION} -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LIBCXX_OPTION} ${CODE_COVERAGE_OPTION} ${SANITIZER_OPTION} -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -g")
 set(CMAKE_EXE_LINKER_FLAGS ${CMAKE_EXE_LINKER_FLAGS} "${THREADS_OPTION}")
 
 # Prevent unnecessary I/O operations during dev runs by disable success

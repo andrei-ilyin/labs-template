@@ -28,14 +28,18 @@
 import os
 import platform
 import sys
+
 from subprocess import call
 from tempfile import TemporaryDirectory
+
+from base import Verdict
 
 if sys.version_info[1] >= 3:
     from subprocess import TimeoutExpired
 else:
     class TimeoutExpired(Exception):
         pass
+
 
 def _is_running_on_windows():
     return platform.system() == 'Windows'
@@ -48,29 +52,28 @@ def maybe_add_exe_extension(path):
 
 
 class BinaryWrapper:
-    def __init__(self, binary_path, dry_run, enable_limits=False):
+    def __init__(self, binary_path, dry_run):
         self._binary_path = os.path.abspath(
             maybe_add_exe_extension(binary_path))
         self._dry_run = dry_run
-        self._enable_limits = enable_limits
 
-    def run(self, args, time_limit=None, memory_limit=None,
+    def run(self, args, time_limit_sec=None, memory_limit_kb=None,
             suppress_output=True, cwd=None):
         if cwd is None:
             with TemporaryDirectory(dir=os.curdir) as tmp:
-                return self._execute(args, tmp, time_limit, memory_limit,
-                                     suppress_output)
+                return self._execute(args, tmp, time_limit_sec,
+                                     memory_limit_kb, suppress_output)
         else:
-            return self._execute(args, cwd, time_limit, memory_limit,
-                                 suppress_output)
+            return self._execute(args, cwd, time_limit_sec,
+                                 memory_limit_kb, suppress_output)
 
-    def _execute(self, args, cwd, time_limit=None, memory_limit=None,
+    def _execute(self, args, cwd, time_limit_sec=None, memory_limit_kb=None,
                  suppress_output=True):
         if not suppress_output:
             raise not NotImplementedError('pipe binary output')
 
         if self._dry_run:
-            return True
+            return Verdict.ACCEPTED
         if args is None:
             args = []
 
@@ -79,22 +82,27 @@ class BinaryWrapper:
         exec_params['stdout'] = open(os.devnull, 'w')
         exec_params['stderr'] = open(os.devnull, 'w')
 
-        if self._enable_limits and not _is_running_on_windows():
+        if not _is_running_on_windows():
             def limit_process_resources():
                 # The following code works on real Linux but crashes on WSL
-                if time_limit is not None:
+                if time_limit_sec is not None:
                     import resource
                     resource.setrlimit(
-                        resource.RLIMIT_CPU, (time_limit, time_limit))
-                if memory_limit is not None:
+                        resource.RLIMIT_CPU,
+                        (time_limit_sec, time_limit_sec)
+                    )
+                if memory_limit_kb is not None:
                     import resource
                     resource.setrlimit(
-                        resource.RLIMIT_AS, (memory_limit, memory_limit))
+                        resource.RLIMIT_AS,
+                        (memory_limit_kb, memory_limit_kb)
+                    )
 
             exec_params['preexec_fn'] = limit_process_resources
 
         try:
             exitcode = call([self._binary_path] + args, cwd=cwd, **exec_params)
-            return exitcode == 0
+            return Verdict.ACCEPTED if exitcode == 0 else Verdict.FAILED
         except TimeoutExpired:
-            return False
+            return Verdict.TIME_LIMIT_EXCEEDED
+        # TODO: Check MLE
