@@ -82,18 +82,26 @@ std::string RandomString(size_t n, int64_t min = 1, int64_t max = 127);
 // ---------------------------------------------------------------------------
 // Time
 
+#ifdef ENABLE_INFINITY_LOOP_CHECK
+constexpr bool kEnableInfinityLoopCheck = true;
+#else
+constexpr bool kEnableInfinityLoopCheck = false;
+#endif
+
 #define ASSERT_NOT_INFINITE_LOOP(timout_millis, stmt) {                        \
-  std::promise<bool> completed;                                                \
-  auto stmt_future = completed.get_future();                                   \
-  std::thread([&](std::promise<bool>& completed) {                             \
-    stmt;                                                                      \
-    completed.set_value(true);                                                 \
-  }, std::ref(completed)).detach();                                            \
-  if (stmt_future.wait_for(std::chrono::milliseconds(timout_millis)) ==        \
-      std::future_status::timeout) {                                           \
-    std::string s = "\ttimed out (> " + std::to_string(timout_millis) +        \
-        " milliseconds).";                                                     \
-    FAIL() << s;                                                               \
+  if (kEnableInfinityLoopCheck) {                                              \
+    std::promise<bool> completed;                                              \
+    auto stmt_future = completed.get_future();                                 \
+    std::thread([&](std::promise<bool>& completed) {                           \
+      stmt;                                                                    \
+      completed.set_value(true);                                               \
+    }, std::ref(completed)).detach();                                          \
+    if (stmt_future.wait_for(std::chrono::milliseconds(timout_millis)) ==      \
+        std::future_status::timeout) {                                         \
+      std::string s = "\ttimed out (> " + std::to_string(timout_millis) +      \
+          " milliseconds).";                                                   \
+      FAIL() << s;                                                             \
+    }                                                                          \
   }                                                                            \
 }
 

@@ -4,14 +4,15 @@
 set -e
 set -o pipefail
 
-CXX="clang++"
-CXX_FLAGS="-std=c++1z -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -Werror -DIGNORE_SOLUTION_MAIN"
+CXX="clang++-10"
+CXX_FLAGS="-std=c++17 -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -Werror -DIGNORE_SOLUTION_MAIN"
 CXX_FLAGS_DBG="$CXX_FLAGS -O0"
 CXX_FLAGS_OPT="$CXX_FLAGS -O2"
 CXX_FLAGS_ASAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=address,leak,undefined -fno-sanitize-recover=all"
-CXX_FLAGS_MSAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=memory"
+# CXX_FLAGS_MSAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=memory -fno-sanitize-recover=all"
 
-LINK_FLAGS="-Wl,-z,stack-size=268435456"
+# LINK_FLAGS="-Wl,-z,stack-size=268435456"
+LINK_FLAGS=""
 
 function build_solution {
     SOLUTION_FILE=${1:-SOLUTION_FILE}
@@ -33,8 +34,8 @@ function build_solution {
     else
         echo This lab supports only ZIP compiler!
         exit 1
-        # mkdir -p $SOLUTION_SRC_DIR
-        # cp $SOLUTION_FILE $SOLUTION_SRC_DIR/
+        #mkdir -p $SOLUTION_SRC_DIR
+        #cp $SOLUTION_FILE $SOLUTION_SRC_DIR/solution.cpp
     fi
 
     TEST_SRC_DIR=$TEMP_DIR/tests_src
@@ -45,7 +46,7 @@ function build_solution {
 
     python3 \
       $TEST_SRC_DIR/cpplint/cpplint.py \
-      --filter='-build/include,-runtime/int,-build/include_subdir,-legal/copyright,-build/c++11,-runtime/references' \
+      --filter='-build/include,-runtime/int,-build/include_subdir,-legal/copyright,-build/c++11' \
       --repository=$SOLUTION_SRC_DIR \
       $SOLUTION_SRCS $SOLUTION_HDRS 2>&1 \
     | sed "s|$SOLUTION_SRC_DIR/||g" \

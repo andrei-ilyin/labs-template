@@ -26,35 +26,75 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from json import dump
-from sys import stderr
+from sys import stderr, stdout
+
+from base import *
 
 
 def _eprint(*args, **kwargs):
     print(*args, file=stderr, **kwargs)
 
 
-def _to_log_line(test_result):
-    if test_result.success:
-        verdict = '  OK  '
+def _verdict_to_log_str(verdict: Verdict):
+    if verdict == Verdict.CHECK_FAILED:
+        return 'SYS_FL'
+    elif verdict == Verdict.ACCEPTED:
+        return '  OK  '
+    elif verdict == Verdict.FAILED:
+        return ' FAIL '
+    elif verdict == Verdict.DEPENDENCY_FAILED:
+        return 'DEP_FL'
+    elif verdict == Verdict.TIME_LIMIT_EXCEEDED:
+        return ' TLE  '
+    elif verdict == Verdict.MEMORY_LIMIT_EXCEEDED:
+        return ' MLE  '
     else:
-        verdict = ' FAIL '
+        return '? NA ?'
 
+
+def _verdict_to_irunner_str(verdict: Verdict):
+    if verdict == Verdict.ACCEPTED:
+        return 'ACCEPTED'
+    else:
+        return 'FAILED'
+
+    # TODO: Handle various verdicts in iRunner
+    # if verdict == Verdict.ACCEPTED or \
+    #         verdict == Verdict.FAILED or \
+    #         verdict == Verdict.TIME_LIMIT_EXCEEDED or \
+    #         verdict == Verdict.MEMORY_LIMIT_EXCEEDED:
+    #     return str(verdict)
+    # else:
+    #     return 'CHECK_FAILED'
+
+
+def _to_log_line(test, print_time=False):
     result_str = '[%s] (score: %s / %s)' % (
-        verdict,
-        str(round(test_result.score, 3)),
-        str(round(test_result.max_score, 3))
+        _verdict_to_log_str(test.result.verdict),
+        str(round(test.result.score, 3)),
+        str(round(test.description.max_score, 3))
     )
-    return ('%-35s' % result_str) + test_result.title
+    result_str = ('%-35s' % result_str) + test.description.full_name()
+
+    if print_time:
+        result_str += '    (time: %.3f s)' % test.result.time_sec
+
+    return result_str
 
 
-class TestResult:
-    def __init__(self, title, success=None, score=0, max_score=1):
-        if success is None:
-            success = (score == max_score)
-        self.title = title
-        self.success = success
-        self.score = score
-        self.max_score = max_score
+def _group_public_feedback(group: TestGroup):
+    return '%s [score: %s / %s]' % (
+        group.description.full_name(),
+        str(round(group.result.score, 3)),
+        str(round(group.description.max_score, 3)),
+    )
+
+
+def _group_judges_feedback(group: TestGroup):
+    tests = []
+    for test in group.tests:
+        tests.append(_to_log_line(test, print_time=True))
+    return '\n'.join(tests)
 
 
 class TestingSystemInterface:
@@ -65,22 +105,21 @@ class TestingSystemInterface:
     def get_test_mode(self):
         raise NotImplementedError("get_test_mode")
 
-    def report_error(self, message):
-        raise NotImplementedError("report_error")
-
-    def write_report(self, score_max, score_gained,
-                     tests_count, tests_passed, detailed_test_results,
-                     print_report_to_stderr):
+    def write_report(self, report: TestingReport, print_stderr_report):
         raise NotImplementedError("write_system_report")
 
-    def _print_stderr_report(self, score_max, score_gained,
-                             tests_count, tests_passed, detailed_test_results):
-        for result in detailed_test_results:
-            _eprint(_to_log_line(result))
+    def _print_stderr_report(self, report: TestingReport, print_time=False):
+        for group in report.groups:
+            _eprint(_to_log_line(group, print_time))
+        if report.general_comment is not None:
+            _eprint(report.general_comment)
         _eprint("Passed %s out of %s tests" % (
-            str(tests_passed), str(tests_count)))
+            str(report.passed_tests_count), str(report.tests_count)))
+        if print_time:
+            _eprint("Total time: %.3f s" % report.result.time_sec)
         _eprint("Total score: %s out of %s" % (
-            str(round(score_gained, 3)), str(round(score_max, 3))))
+            str(round(report.result.score, 3)),
+            str(round(report.max_score, 3))))
         stderr.flush()
 
 
@@ -108,20 +147,14 @@ class YandexContestInterface(TestingSystemInterface):
             else:
                 raise PermissionError("Wrong input secret!")
 
-    def write_report(self, score_max, score_gained,
-                     tests_count, tests_passed, detailed_test_results,
-                     print_report_to_stderr):
-        self._print_stderr_report(score_max, score_gained,
-                                  tests_count, tests_passed,
-                                  detailed_test_results)
+    def write_report(self, report: TestingReport, print_stderr_report):
+        if print_stderr_report:
+            self._print_stderr_report(report)
+        # for group in report.groups:
+        #     print(_group_judges_feedback(group) + '\n')
         with open(self._output_filename, "w") as f:
-            f.write(self._output_secret + "\n" + str(round(score_gained, 3)))
-
-    def report_error(self, message):
-        _eprint('Error: ' + message)
-        stderr.flush()
-        with open(self._output_filename, "w") as f:
-            f.write(self._output_secret + "\n" + str(0))
+            f.write(self._output_secret + "\n"
+                    + str(round(report.result.score, 3)))
 
 
 class IRunnerInterface(TestingSystemInterface):
@@ -131,48 +164,50 @@ class IRunnerInterface(TestingSystemInterface):
     def get_test_mode(self):
         return self.ALL_TESTS_RUN
 
-    def write_report(self, score_max, score_gained,
-                     tests_count, tests_passed, detailed_test_results,
-                     print_report_to_stderr):
-        if print_report_to_stderr:
-            self._print_stderr_report(
-                score_max, score_gained,
-                tests_count, tests_passed, detailed_test_results)
-        self._write_json('ACCEPTED', score_gained, score_max,
-                         detailed_test_results)
+    def write_report(self, report: TestingReport, print_stderr_report):
+        if print_stderr_report:
+            self._print_stderr_report(report, print_time=True)
+        self._write_json(report)
 
-    def report_error(self, message):
-        _eprint('Error: ' + message)
-        stderr.flush()
-        self._write_json('CHECK_FAILED', 0, [])
+    def _group_json(self, verdict: Verdict, score=0, max_score=0, time_ms=0,
+                    time_limit_ms=0, checker_comment='', stderr='', stdout='',
+                    answer=''):
+        return {
+            'verdict': (verdict == Verdict.ACCEPTED),
+            # 'verdict': _verdict_to_irunner_str(verdict),
+            'score': score,
+            'max_score': max_score,
+            'time_ms': 0,
+            'time_limit_ms': 0,
+            # 'time_ms': time_ms,
+            # 'time_limit_ms': time_limit_ms,
+            'comment': checker_comment,
+            'output': answer,
+            'stdout': stdout,
+            'stderr': stderr,
+        }
 
-    @staticmethod
-    def _comment(test_result):
-        return '%s [score: %s / %s]' % (
-            test_result.title,
-            str(round(test_result.score, 3)),
-            str(round(test_result.max_score, 3)),
-        )
-
-    def _write_json(self, verdict, score, max_score, test_results):
+    def _write_json(self, report: TestingReport):
         tests = []
-        for result in test_results:
-            tests.append({
-                'verdict': result.success,
-                'score': round(result.score),
-                'max_score': round(result.max_score),
-                'time_ms': 0,
-                'time_limit_ms': 0,
-                'comment': self._comment(result),
-                'output': '',
-                'stdout': '',
-                'stderr': '',
-            })
+        if report.general_comment is not None:
+            tests.append(self._group_json(
+                report.result, checker_comment=report.general_comment))
+
+        for group in report.groups:
+            tests.append(self._group_json(
+                group.result.verdict,
+                score=round(group.result.score),
+                max_score=round(group.description.max_score),
+                time_ms=group.result.time_sec * 1000,
+                time_limit_ms=group.description.resource_limits.time_sec * 1000,
+                checker_comment=_group_public_feedback(group),
+                answer=_group_judges_feedback(group),
+            ))
 
         with open(self._report_file, 'w') as outfile:
             dump({
-                'verdict': verdict,
-                'score': round(score),
-                'max_score': round(max_score),
+                'verdict': _verdict_to_irunner_str(report.result.verdict),
+                'score': round(report.result.score),
+                'max_score': round(report.max_score),
                 'tests': tests,
             }, outfile)
