@@ -36,7 +36,7 @@ SAFE_TEST(YetAnotherPrivateGroup, Test2) {
   }
 }
 
-SAFE_TEST(YetAnotherPrivateGroup, Test3) {
+SAFE_TEST(YetAnotherPrivateGroup, AnotherTest3) {
   ASSERT_TRUE(true);
 }
 
