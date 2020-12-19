@@ -45,7 +45,8 @@ class Tester:
         self._private_tests.append(test)
 
     def run(self, test_system_interface: TestingSystemInterface,
-            verbose=False, print_report_to_stderr=True):
+            verbose=False, print_report_to_stderr=True,
+            print_test_config=False):
         try:
             # Get mode
             testing_mode = test_system_interface.get_test_mode()
@@ -59,7 +60,7 @@ class Tester:
                 raise NotImplementedError('testing mode not supported')
 
             # Execute the tests
-            self._run_tests(tests_list, verbose)
+            self._run_tests(tests_list, verbose, print_test_config)
 
             # Prepare test groups
             test_groups = dict()
@@ -101,7 +102,11 @@ class Tester:
             report.general_comment = 'CF: ' + str(e)
             test_system_interface.write_report(report, print_report_to_stderr)
 
-    def _run_tests(self, tests_list, verbose):
+    def _run_tests(self, tests_list, verbose, print_test_config):
+        if verbose and print_test_config:
+            print('Starting testing with overall TL ' + str(
+                self._overall_tl_sec) + ' seconds')
+
         overall_time_sec = 0
         for test in tests_list:
             if test.result is not None:
@@ -115,6 +120,22 @@ class Tester:
             if verbose:
                 print("-- running '%s.%s'" % (
                     test.description.suit_name, test.description.test_name))
+                if print_test_config:
+                    print('  Type: ' + str(
+                        test.description.type))
+                    print('  Dependencies: ' + str(
+                        [
+                            t.description.full_name()
+                            for t in test.description.dependencies
+                        ]))
+                    print('  Max score: ' + str(
+                        test.description.max_score))
+                    print('  Standalone: ' + str(
+                        test.description.exclude_from_aggregation))
+                    print('  Time limit: ' + str(
+                        test.description.resource_limits.time_sec))
+                    print('  Memory limit: ' + str(
+                        test.description.resource_limits.memory_kb))
                 stdout.flush()
 
             test.result = test.runner.run(test.description)

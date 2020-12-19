@@ -27,9 +27,10 @@
 
 import os
 import platform
+import subprocess
 import sys
+import threading
 
-from subprocess import call
 from tempfile import TemporaryDirectory
 
 from base import Verdict
@@ -49,6 +50,33 @@ def maybe_add_exe_extension(path):
     if _is_running_on_windows():
         path += '.exe'
     return path
+
+
+class ProcessWithTimeout:
+    def __init__(self, timeout):
+        self.timeout = timeout
+        self.process = None
+
+    def run(self, *args, **kwargs):
+        def target():
+            self.process = subprocess.Popen(*args, **kwargs)
+            self.process.communicate()
+
+        if self.timeout is not None:
+            thread = threading.Thread(target=target)
+            thread.start()
+
+            thread.join(self.timeout)
+            if thread.is_alive():
+                self.process.kill()
+                thread.join()
+                return (True, self.process.returncode)
+
+            return (False, self.process.returncode)
+
+        else:
+            target()
+            return (False, self.process.returncode)
 
 
 class BinaryWrapper:
@@ -86,23 +114,37 @@ class BinaryWrapper:
             def limit_process_resources():
                 # The following code works on real Linux but crashes on WSL
                 if time_limit_sec is not None:
+                    # We hope that the code with 'kill by timer' logic works fine,
+                    # but lets leave this rlimit still active until the new way of
+                    # TLE detection will be properly tested.
                     import resource
                     resource.setrlimit(
                         resource.RLIMIT_CPU,
-                        (time_limit_sec, time_limit_sec)
+                        (time_limit_sec * 2, time_limit_sec * 2)
                     )
                 if memory_limit_kb is not None:
-                    import resource
-                    resource.setrlimit(
-                        resource.RLIMIT_AS,
-                        (memory_limit_kb, memory_limit_kb)
-                    )
+                    # TODO: Remove this *temporary* hack
+                    if not self._binary_path.endswith(('_asan', '_asan.exe')):
+                        import resource
+                        resource.setrlimit(
+                            resource.RLIMIT_AS,
+                            (memory_limit_kb * 1024, memory_limit_kb * 1024)
+                        )
 
             exec_params['preexec_fn'] = limit_process_resources
 
-        try:
-            exitcode = call([self._binary_path] + args, cwd=cwd, **exec_params)
-            return Verdict.ACCEPTED if exitcode == 0 else Verdict.FAILED
-        except TimeoutExpired:
+        #try:
+            # exitcode = call([self._binary_path] + args, cwd=cwd, **exec_params)
+
+        proc = ProcessWithTimeout(timeout=time_limit_sec)
+        (killed_by_timer, exitcode) = \
+            proc.run([self._binary_path] + args, cwd=cwd, **exec_params)
+
+        if killed_by_timer:
             return Verdict.TIME_LIMIT_EXCEEDED
+
+        return Verdict.ACCEPTED if exitcode == 0 else Verdict.FAILED
+
+        #except TimeoutExpired:
+        #    return Verdict.TIME_LIMIT_EXCEEDED
         # TODO: Check MLE

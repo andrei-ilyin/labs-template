@@ -64,6 +64,10 @@ if __name__ == '__main__':
                         help='If specified, continuously prints information '
                              ' about testing progress to stdout.',
                         action='store_true')
+    parser.add_argument('--print-test-config',
+                        default=False,
+                        help='Extends verbose info with config (TL/ML/etc.).',
+                        action='store_true')
     parser.add_argument('--irunner-report-json')
     args = parser.parse_args()
 
@@ -76,4 +80,5 @@ if __name__ == '__main__':
     tester = config.create_tester(
         enable_aggregation=not args.disable_aggregation)
     tester.run(test_system_interface, verbose=args.verbose_testing,
-               print_report_to_stderr=args.print_report_to_stderr)
+               print_report_to_stderr=args.print_report_to_stderr,
+               print_test_config=args.print_test_config)

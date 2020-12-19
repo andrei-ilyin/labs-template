@@ -33,7 +33,7 @@ from tester import Tester
 
 
 class Configurator:
-    def __init__(self, overall_tl_sec=600, default_time_limit_sec=1800,
+    def __init__(self, overall_tl_sec=600, default_time_limit_sec=180,
                  default_memory_limit_kb=None):
         self._full_name_to_test = {}
         self._suits = set()
@@ -48,10 +48,10 @@ class Configurator:
             if test_full_name in self._full_name_to_test:
                 print("ERROR: Test '%s' loaded multiple times!" % test)
             else:
-                test.description.resource_limits.time_sec = \
-                    self._default_time_limit_sec
-                test.description.resource_limits.memory_kb = \
+                test.description.resource_limits = ResourceLimits(
+                    self._default_time_limit_sec,
                     self._default_memory_limit_kb
+                )
                 self._full_name_to_test[test_full_name] = test
                 self._suits.add(test.description.suit_name)
 
