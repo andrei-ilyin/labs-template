@@ -53,7 +53,7 @@ class ResourceLimits:
 class TestDescription:
     def __init__(self, suit_name, test_name, max_score=0,
                  type: TestType = TestType.UNUSED,
-                 resource_limits: ResourceLimits = ResourceLimits(None, None),
+                 resource_limits: ResourceLimits = None,
                  exclude_from_aggregation=False):
         self.suit_name = suit_name
         self.test_name = test_name
@@ -97,7 +97,8 @@ class Test:
 
 class TestGroup:
     def __init__(self, suit_name, test_name):
-        self.description = TestDescription(suit_name, test_name)
+        self.description = TestDescription(
+            suit_name, test_name, resource_limits=ResourceLimits(0, None))
         self.result = TestResult(Verdict.ACCEPTED, 0, 0)
         self.tests = []
         self.passed_tests_count = 0
