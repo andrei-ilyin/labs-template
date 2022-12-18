@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Andrei Ilyin, Andrei Nevero. All rights reserved.
+// Copyright (c) 2019-2022 Andrei Ilyin, Andrei Nevero. All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -31,8 +31,8 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
-#include <cstdlib>
 #include <cmath>
+#include <cstdlib>
 #include <future>
 #include <random>
 #include <string>
@@ -41,8 +41,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #elif _WIN32
-#include <windows.h>
 #include <memoryapi.h>
+#include <windows.h>
 #endif
 
 #include "gtest/gtest.h"
@@ -68,6 +68,10 @@ int64_t SRandom64(int64_t min, int64_t max);
 uint32_t URandom32(uint32_t min, uint32_t max);
 int32_t SRandom32(int32_t min, int32_t max);
 
+std::vector<int16_t> RandomInt16Array(
+    size_t n, int16_t min = INT16_MIN, int16_t max = INT16_MAX);
+std::vector<uint16_t> RandomUInt16Array(
+    size_t n, uint16_t min = 0, uint16_t max = UINT16_MAX);
 std::vector<int32_t> RandomInt32Array(
     size_t n, int32_t min = INT32_MIN, int32_t max = INT32_MAX);
 std::vector<uint32_t> RandomUInt32Array(
@@ -108,27 +112,38 @@ constexpr bool kEnableInfinityLoopCheck = false;
 // Checks if user function execution time is no more than correct function
 // execution time, multiplied by the constant.
 
+#ifdef DISABLE_TIME_MEASUREMENT
+constexpr bool kDisableTimeMeasurement = true;
+#else
+constexpr bool kDisableTimeMeasurement = false;
+#endif
+
 #define ASSERT_DURATION_GE(correct_function, user_function)                    \
   ASSERT_DURATION_GE_A(correct_function, user_function, 2)
 
 #define ASSERT_DURATION_GE_A(correct_function, user_function, time_constant) { \
-  auto _first_time = std::chrono::high_resolution_clock::now();                \
-  correct_function;                                                            \
-  auto _second_time = std::chrono::high_resolution_clock::now();               \
-  user_function;                                                               \
-  auto _third_time = std::chrono::high_resolution_clock::now();                \
+  if (!kDisableTimeMeasurement) {                                              \
+    auto _first_time = std::chrono::high_resolution_clock::now();              \
+    correct_function;                                                          \
+    auto _second_time = std::chrono::high_resolution_clock::now();             \
+    user_function;                                                             \
+    auto _third_time = std::chrono::high_resolution_clock::now();              \
                                                                                \
-  auto _author_exec_time =                                                     \
-      1 + std::chrono::duration_cast<std::chrono::microseconds>(               \
-          _second_time - _first_time).count();                                 \
-  auto _user_exec_time =                                                       \
-      1 + std::chrono::duration_cast<std::chrono::microseconds>(               \
-          _third_time - _second_time).count();                                 \
+    auto _author_exec_time =                                                   \
+        1 + std::chrono::duration_cast<std::chrono::microseconds>(             \
+            _second_time - _first_time).count();                               \
+    auto _user_exec_time =                                                     \
+        1 + std::chrono::duration_cast<std::chrono::microseconds>(             \
+            _third_time - _second_time).count();                               \
                                                                                \
-  if (time_constant * _author_exec_time < _user_exec_time) {                   \
-    FAIL() << "\tTime limit exceeded.\n\tUser time: "                          \
-           << std::to_string(_user_exec_time) << "\n\tAuthor time: "           \
-           << std::to_string(_author_exec_time);                               \
+    if (time_constant * _author_exec_time < _user_exec_time) {                 \
+      FAIL() << "\tTime limit exceeded.\n\tUser time: "                        \
+             << std::to_string(_user_exec_time) << "\n\tAuthor time: "         \
+             << std::to_string(_author_exec_time);                             \
+    }                                                                          \
+  } else {                                                                     \
+    correct_function;                                                          \
+    user_function;                                                             \
   }                                                                            \
 }
 
@@ -280,6 +295,59 @@ void RunTestOnROString(const std::string& data,
   ASSERT_NO_FATAL_FAILURE(RunTestOnROString(data, fn));
 
 // ---------------------------------------------------------------------------
+// Protected memory: Bytes before/after mutable array
+
+constexpr int kNumericArrayBorderSize = 42;
+
+template<typename T>
+std::vector<T> AddNumericArrayBorders(
+    const std::vector<T>& data, int guard_base = 4242) {
+  std::vector<T> result;
+  result.reserve(data.size() + 2 * kNumericArrayBorderSize);
+  for (int i = 0; i < kNumericArrayBorderSize; ++i) {
+    result.push_back(i * i + guard_base);
+  }
+  for (T element : data) {
+    result.push_back(element);
+  }
+  for (int i = 0; i < kNumericArrayBorderSize; ++i) {
+    result.push_back(i * i + guard_base);
+  }
+  return result;
+}
+
+template<typename T>
+bool RemoveNumericArrayBorders(
+    const std::vector<T>& data_with_border, std::vector<T>* data,
+    int guard_base = 4242) {
+  int trailing_data_begin = data_with_border.size() - kNumericArrayBorderSize;
+
+  // Validate size
+  if (data_with_border.size() < 2 * kNumericArrayBorderSize) {
+    return false;
+  }
+
+  // Validate border elements
+  for (int i = 0; i < kNumericArrayBorderSize; ++i) {
+    T expected_element = (i * i + guard_base);
+    if (data_with_border[i] != expected_element) {
+      return false;
+    }
+    if (data_with_border[trailing_data_begin + i] != expected_element) {
+      return false;
+    }
+  }
+
+  // Extract actual elements
+  *data = std::vector<T>(
+    data_with_border.begin() + kNumericArrayBorderSize,
+    data_with_border.end() - kNumericArrayBorderSize
+  );
+
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Misc
 
 #define TYPE_IS(value, type) (std::is_same_v<decltype(value), type>)
@@ -369,8 +437,18 @@ std::vector<T> Sequence(int size, T first) {
 double RelativeDifference(double value, double answer);
 
 #define ASSERT_NEAR_REL(value, answer, eps)                                    \
-    ASSERT_LE(RelativeDifference(value, answer), 2. * eps)                     \
+  ASSERT_LE(RelativeDifference(value, answer), 2. * eps)                       \
       << "Value = " << value << ", answer = " << answer << '\n'
+
+#define EXPECT_ALMOST_EQ(a, b) {                                               \
+  EXPECT_GE((a), (b) - 1);                                                     \
+  EXPECT_LE((a), (b) + 1);                                                     \
+}
+
+#define ASSERT_ALMOST_EQ(a, b) {                                               \
+  ASSERT_GE((a), (b) - 1);                                                     \
+  ASSERT_LE((a), (b) + 1);                                                     \
+}
 
 // ---------------------------------------------------------------------------
 // TEST() macro extension
@@ -382,7 +460,7 @@ double RelativeDifference(double value, double answer);
     SetRand64Seed(seed);                                                       \
     ASSERT_NOT_INFINITE_LOOP(                                                  \
         timeout_millis, { SuitName##CaseName##Body(); });                      \
-    for (int iter = 0; iter < iterations; ++iter ) {                           \
+    for (int iter = 0; iter < iterations; ++iter) {                            \
       SetRand64Seed(seed);                                                     \
       ASSERT_NO_FATAL_FAILURE(SuitName##CaseName##Body());                     \
     }                                                                          \
@@ -392,18 +470,28 @@ double RelativeDifference(double value, double answer);
 #define SAFE_TEST(SuitName, CaseName)                                          \
   SAFE_TEST_A(SuitName, CaseName, 30'000, 2, 12345678)
 
-#define ASM_TEST_A(SuitName, CaseName, timeout_millis, iters, seed)            \
-  void SuitName##CaseName##TestFn(decltype((Asm##SuitName)) SuitName);         \
-  SAFE_TEST_A(SuitName, CaseName##_Regular, timeout_millis, iters, seed) {     \
-    SuitName##CaseName##TestFn(Asm##SuitName);                                 \
-  }                                                                            \
-  SAFE_TEST_A(SuitName, CaseName##_Wrapped, timeout_millis, iters, seed) {     \
-    SuitName##CaseName##TestFn(SuitName##Wrapper);                             \
-  }                                                                            \
-  void SuitName##CaseName##TestFn(decltype((Asm##SuitName)) SuitName)
+#define SAFE_TEST_V(Variant, SuitName, CaseName)                               \
+  SAFE_TEST(SuitName##_##Variant, CaseName)
 
-#define ASM_TEST(SuitName, CaseName)                                           \
-  ASM_TEST_A(SuitName, CaseName, 30'000, 3, 12345678)
+// Speed tests should only be run in Release (OPT) edition of the binary
+
+#ifdef SKIP_SPEED_TESTS
+constexpr bool kSkipSpeedTests = true;
+#else
+constexpr bool kSkipSpeedTests = false;
+#endif
+
+#define SPEED_TEST_A(SuitName, CaseName, timeout_millis, iters, seed)          \
+  void SuitName##CaseName##TestFn();                                           \
+  SAFE_TEST_A(SuitName, CaseName, timeout_millis, iters, seed) {               \
+    if (!kSkipSpeedTests) {                                                    \
+      SuitName##CaseName##TestFn();                                            \
+    }                                                                          \
+  }                                                                            \
+  void SuitName##CaseName##TestFn()
+
+#define SPEED_TEST(SuitName, CaseName)                                         \
+  SPEED_TEST_A(SuitName, CaseName, 60'000, 2, 12345678)
 
 // Shorter form of the gTest macros
 // If any assertions are done inside of a function other than the test body,
@@ -411,4 +499,4 @@ double RelativeDifference(double value, double answer);
 // the failure won't be caught!
 #define RUN_TEST_FN(Test) ASSERT_NO_FATAL_FAILURE(Test)
 
-#endif  // UTILS_H
+#endif  // UTILS_H_

@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Andrei Ilyin. All rights reserved.
+# Copyright (c) 2019-2022 Andrei Ilyin. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -32,11 +32,12 @@ from interface import TestingSystemInterface
 
 
 class Tester:
-    def __init__(self, overall_tl_sec):
+    def __init__(self, overall_tl_sec, enable_time_limit_debug_mode):
         self._public_tests = []
         self._private_tests = []
         self._aggregated_suits = set()
         self._overall_tl_sec = overall_tl_sec
+        self._enable_time_limit_debug_mode = enable_time_limit_debug_mode
 
     def add_public_test(self, test: Test):
         self._public_tests.append(test)
@@ -63,6 +64,7 @@ class Tester:
             self._run_tests(tests_list, verbose, print_test_config)
 
             # Prepare test groups
+            test_groups_order = []
             test_groups = dict()
             for test in tests_list:
                 suit_name = test.description.suit_name
@@ -74,16 +76,18 @@ class Tester:
                     group.tests.append(test)
                     if test.result.verdict == Verdict.ACCEPTED:
                         group.passed_tests_count = 1
+                    test_groups_order.append(test.description.full_name())
                     test_groups[test.description.full_name()] = group
                 else:
                     group_name = suit_name + '.*'
                     if group_name not in test_groups:
+                        test_groups_order.append(group_name)
                         test_groups[group_name] = TestGroup(suit_name, '*')
                     test_groups[group_name].update_with_test(test)
 
             # Generate full report
             report = TestingReport()
-            for group_name in test_groups:
+            for group_name in test_groups_order:
                 report.update_with_group(test_groups[group_name])
 
             # Send report to the system
@@ -123,7 +127,7 @@ class Tester:
                 if print_test_config:
                     print('  Type: ' + str(
                         test.description.type))
-                    print('  Dependencies: ' + str(
+                    print('  Dependencies from this test: ' + str(
                         [
                             t.description.full_name()
                             for t in test.description.dependencies
@@ -138,10 +142,25 @@ class Tester:
                         test.description.resource_limits.memory_kb))
                 stdout.flush()
 
-            test.result = test.runner.run(test.description)
+            if self._enable_time_limit_debug_mode:
+                real_tl_sec = test.description.resource_limits.time_sec
+                test.description.resource_limits.time_sec = None
+                test.result = test.runner.run(test.description)
+                test.description.resource_limits.time_sec = real_tl_sec
+
+                if test.result.time_sec * 4 > real_tl_sec:
+                    print('[ WARNING ] Test execution time is %.4f '
+                          'while limit is %.4f (test: %s)'
+                          % ((test.result.time_sec,
+                              real_tl_sec,
+                              test.description.full_name())))
+                    stdout.flush()
+            else:
+                test.result = test.runner.run(test.description)
 
             overall_time_sec += test.result.time_sec
-            if overall_time_sec > self._overall_tl_sec:
+            if overall_time_sec > self._overall_tl_sec and \
+                    not self._enable_time_limit_debug_mode:
                 raise TimeoutError(
                     'General time limit exceeded. Testing aborted.')
 
@@ -149,3 +168,9 @@ class Tester:
                 for dependent_test in test.description.dependencies:
                     dependent_test.result = TestResult(
                         Verdict.DEPENDENCY_FAILED, 0, 0)
+
+        if overall_time_sec * 4 > self._overall_tl_sec:
+            print('[ WARNING ] Overall execution time is %.4f '
+                  '(overall limit is %.4f)'
+                  % ((overall_time_sec, self._overall_tl_sec)))
+            stdout.flush()

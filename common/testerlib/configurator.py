@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Andrei Ilyin. All rights reserved.
+# Copyright (c) 2019-2022 Andrei Ilyin. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -26,7 +26,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import re
-from collections import defaultdict
 
 from base import *
 from tester import Tester
@@ -35,6 +34,7 @@ from tester import Tester
 class Configurator:
     def __init__(self, overall_tl_sec=600, default_time_limit_sec=180,
                  default_memory_limit_kb=None):
+        self._tests_order = []
         self._full_name_to_test = {}
         self._suits = set()
         self._standalone_tests = []
@@ -52,24 +52,25 @@ class Configurator:
                     self._default_time_limit_sec,
                     self._default_memory_limit_kb
                 )
+                self._tests_order.append(test_full_name)
                 self._full_name_to_test[test_full_name] = test
                 self._suits.add(test.description.suit_name)
 
     def override_time_limit(self, regex_filter, time_limit_sec):
-        for test_full_name in self._full_name_to_test.keys():
+        for test_full_name in self._tests_order:
             if re.match(regex_filter, test_full_name):
                 self._full_name_to_test[test_full_name]. \
                     description.resource_limits.time_sec = time_limit_sec
 
     def override_memory_limit(self, regex_filter, memory_limit_kb):
-        for test_full_name in self._full_name_to_test.keys():
+        for test_full_name in self._tests_order:
             if re.match(regex_filter, test_full_name):
                 self._full_name_to_test[test_full_name]. \
                     description.resource_limits.memory_kb = memory_limit_kb
 
     def _process_group(self, regex_filter, group_score, group_type):
         tests = []
-        for test_name in self._full_name_to_test.keys():
+        for test_name in self._tests_order:
             if re.match(regex_filter, test_name):
                 tests.append(self._full_name_to_test[test_name])
 
@@ -146,35 +147,41 @@ class Configurator:
     def skip_group(self, regex_filter):
         self._process_group(regex_filter, 0, TestType.IGNORED)
 
+    def force_skip_group(self, regex_filter, reverse_filter=False):
+        for test_name in self._tests_order:
+            if (re.match(regex_filter, test_name) is not None) ^ (reverse_filter):
+                self._full_name_to_test[test_name].description.type = TestType.IGNORED
+
     def mark_standalone_tests(self, regex_filter):
         self._standalone_tests.append(regex_filter)
 
     def add_dependency(self, target_tests_filter, required_tests_filter):
         required_tests = []
-        for test_full_name in self._full_name_to_test.keys():
+        for test_full_name in self._tests_order:
             if re.match(target_tests_filter, test_full_name):
                 required_tests.append(self._full_name_to_test[test_full_name])
 
-        for test_full_name in self._full_name_to_test.keys():
+        for test_full_name in self._tests_order:
             if re.match(required_tests_filter, test_full_name):
                 self._full_name_to_test[
                     test_full_name].description.dependencies += required_tests
 
     def normalize_scores(self, total_score):
         scores_sum = 0
-        for test_full_name in self._full_name_to_test.keys():
+        for test_full_name in self._tests_order:
             scores_sum += self._full_name_to_test[
                 test_full_name].description.max_score
 
         scale = total_score / scores_sum
-        for test_full_name in self._full_name_to_test.keys():
+        for test_full_name in self._tests_order:
             self._full_name_to_test[
                 test_full_name].description.max_score *= scale
 
-    def create_tester(self, enable_aggregation):
-        tester = Tester(overall_tl_sec=self._overall_tl_sec)
+    def create_tester(self, enable_aggregation, time_limit_debug_mode):
+        tester = Tester(overall_tl_sec=self._overall_tl_sec,
+                        enable_time_limit_debug_mode=time_limit_debug_mode)
 
-        for test_full_name in self._full_name_to_test.keys():
+        for test_full_name in self._tests_order:
             test = self._full_name_to_test[test_full_name]
 
             if not enable_aggregation:
