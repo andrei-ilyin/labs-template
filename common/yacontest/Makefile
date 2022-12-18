@@ -11,4 +11,4 @@ compile:
 
 # Called at 'run' stage
 run:
-	$(Q_MODE) python3 ./runner.py --mode=yandex-contest
+	$(Q_MODE) python3.7 ./runner.py --mode=yandex-contest

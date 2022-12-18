@@ -5,11 +5,11 @@ set -e
 set -o pipefail
 
 CXX="clang++-10"
-CXX_FLAGS="-std=c++17 -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -Werror -DIGNORE_SOLUTION_MAIN"
-CXX_FLAGS_DBG="$CXX_FLAGS -O0"
+CXX_FLAGS="-std=c++20 -stdlib=libc++ -pthread -fPIC -Wall -Wextra -Wno-sign-compare -Wno-attributes -Werror -DIGNORE_SOLUTION_MAIN"
+CXX_FLAGS_DBG="$CXX_FLAGS -O0 -DSKIP_SPEED_TESTS"
 CXX_FLAGS_OPT="$CXX_FLAGS -O2"
-CXX_FLAGS_ASAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=address,leak,undefined -fno-sanitize-recover=all"
-# CXX_FLAGS_MSAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=memory -fno-sanitize-recover=all"
+CXX_FLAGS_ASAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=address,leak,undefined -fno-sanitize-recover=all -DSKIP_SPEED_TESTS"
+# CXX_FLAGS_MSAN="$CXX_FLAGS -O2 -g -fno-omit-frame-pointer -fsanitize=memory -fno-sanitize-recover=all -DSKIP_SPEED_TESTS"
 
 # LINK_FLAGS="-Wl,-z,stack-size=268435456"
 LINK_FLAGS=""
@@ -52,11 +52,21 @@ function build_solution {
     | sed "s|$SOLUTION_SRC_DIR/||g" \
     | perl -ne 'print if not /Done processing/'
 
+    # Randomization
+
+    set +o pipefail
+    HIDDEN_NAMESPACE="randomized_namespace_name"
+    randomized_namespace=$(cat /dev/urandom | tr -dc '[:alpha:]' | fold -w 30 | head -n 1)
+    set -o pipefail
+    sed -i "s|${HIDDEN_NAMESPACE}|${randomized_namespace}|g" $TEST_SRCS $TEST_HDRS || true
+
     # Compilation
 
     function remove_paths_from_log {
         sed -i "s|$SOLUTION_SRC_DIR/||g" $1
         sed -i "s|$TEST_SRC_DIR/||g" $1
+        sed -i "s|$HIDDEN_NAMESPACE|HIDDEN|g" $1 || true
+        sed -i "s|$randomized_namespace|HIDDEN|g" $1 || true
         perl -i -ne 'print if not (/gtest/ or /gmock/)' $1
     }
 
@@ -69,16 +79,22 @@ function build_solution {
         mkdir -p $COMPILE_DIR
         cd $COMPILE_DIR
 
-        touch solution_compiler_output.log
-        if [[ -n `$CXX_CMD -c $SOLUTION_SRCS &> solution_compiler_output.log || echo $?` ]]; then
-            remove_paths_from_log solution_compiler_output.log
-            grep -e note -e warning -e error solution_compiler_output.log && false;
+        if [[ -n "$SOLUTION_SRCS" ]]; then
+          touch solution_compiler_output.log
+          exitcode=`$CXX_CMD -c $SOLUTION_SRCS &> solution_compiler_output.log || echo $?`
+          remove_paths_from_log solution_compiler_output.log
+          grep -e note -e warning -e error  solution_compiler_output.log || true
+          if [[ -n $exitcode ]]; then
+              false;
+          fi;
         fi;
 
         touch tests_compiler_output.log
-        if [[ -n `$CXX_CMD -c $TEST_SRCS &> tests_compiler_output.log || echo $?` ]]; then
-            remove_paths_from_log tests_compiler_output.log
-            grep -e note -e warning -e error tests_compiler_output.log && false;
+        exitcode=`$CXX_CMD -c $TEST_SRCS &> tests_compiler_output.log || echo $?`
+        remove_paths_from_log tests_compiler_output.log
+        grep -e note -e warning -e error  tests_compiler_output.log || true
+        if [[ -n $exitcode ]]; then
+            false;
         fi;
 
         if [[ -d $PRECOMPILED_OBJ_DIR ]]; then
@@ -106,15 +122,15 @@ function build_solution {
         cd - &>/dev/null
     }
 
-    compile_tests "$CXX_FLAGS_DBG" obj_dbg $OUTPUT_DIR/tests_dbg
-    compile_tests "$CXX_FLAGS_OPT" obj_opt $OUTPUT_DIR/tests_opt
-    compile_tests "$CXX_FLAGS_ASAN" obj_asan $OUTPUT_DIR/tests_asan
-    # compile_tests "$CXX_FLAGS_MSAN" obj_msan $OUTPUT_DIR/tests_msan
+    compile_tests "$CXX_FLAGS_DBG" obj_dbg "$OUTPUT_DIR"/tests_dbg
+    compile_tests "$CXX_FLAGS_OPT" obj_opt "$OUTPUT_DIR"/tests_opt
+    compile_tests "$CXX_FLAGS_ASAN" obj_asan "$OUTPUT_DIR"/tests_asan
+    # compile_tests "$CXX_FLAGS_MSAN" obj_msan "$OUTPUT_DIR"/tests_msan
 
     # Copy helper scripts
 
-    cp $TEST_SRC_DIR/tester_config.py $OUTPUT_DIR/
-    cp $TEST_SRC_DIR/testerlib/*.py $OUTPUT_DIR/
+    cp "$TEST_SRC_DIR"/tester_config.py "$OUTPUT_DIR"/
+    cp "$TEST_SRC_DIR"/testerlib/*.py "$OUTPUT_DIR"/
 }
 
 function precompile_libs {
@@ -129,17 +145,17 @@ function precompile_libs {
         local CXX_CMD="$CXX -I$LIBS_DIR $1"
         local COMPILE_DIR=$TEMP_DIR/$2
 
-        mkdir -p $COMPILE_DIR
-        cd $COMPILE_DIR
+        mkdir -p "$COMPILE_DIR"
+        cd "$COMPILE_DIR"
 
-        $CXX_CMD -c $LIBS_DIR/gtest/gtest-all.cc -o gtest.o
-        $CXX_CMD -c $LIBS_DIR/gmock/gmock-all.cc -o gmock.o
-        $CXX_CMD -c $LIBS_DIR/gmock/gmock_main.cc -o gmock_main.o
+        $CXX_CMD -c "$LIBS_DIR/gtest/gtest-all.cc" -o gtest.o
+        $CXX_CMD -c "$LIBS_DIR/gmock/gmock-all.cc" -o gmock.o
+        $CXX_CMD -c "$LIBS_DIR/gmock/gmock_main.cc" -o gmock_main.o
 
         cd - &>/dev/null
 
-        zip -r $PACKAGE_ZIP $2/
-        rm -rf $2/
+        zip -r "$PACKAGE_ZIP" "$2"/
+        rm -rf "${2:?}"/
     }
 
     precompile "$CXX_FLAGS_DBG" obj_dbg

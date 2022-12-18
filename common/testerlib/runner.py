@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) 2019-2020 Andrei Ilyin. All rights reserved.
+# Copyright (c) 2019-2022 Andrei Ilyin. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -30,11 +30,12 @@
 import argparse
 import os
 
-from interface import YandexContestInterface, IRunnerInterface
+from interface import YandexContestInterface, IRunnerInterface, LocalInterface
 from tester_config import configure
 
 YANDEX_CONTEST_MODE = 'yandex-contest'
 IRUNNER_MODE = 'irunner'
+LOCAL_MODE = 'local'
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -43,7 +44,7 @@ if __name__ == '__main__':
                         help='Path to the directory with executables.')
     parser.add_argument('--mode',
                         default=IRUNNER_MODE,
-                        choices=[YANDEX_CONTEST_MODE, IRUNNER_MODE])
+                        choices=[YANDEX_CONTEST_MODE, IRUNNER_MODE, LOCAL_MODE])
     parser.add_argument('--dry-run',
                         default=False,
                         help='If true, doesn\'t actually execute the tests.',
@@ -68,17 +69,26 @@ if __name__ == '__main__':
                         default=False,
                         help='Extends verbose info with config (TL/ML/etc.).',
                         action='store_true')
+    parser.add_argument('--time-limit-debug',
+                        default=False,
+                        help='If enabled, TLE will not cause test failure, but'
+                             ' there will be a warning printed if exec time is'
+                             ' less than 1/4 of the specified TL.',
+                        action='store_true')
     parser.add_argument('--irunner-report-json')
     args = parser.parse_args()
 
     if args.mode == YANDEX_CONTEST_MODE:
         test_system_interface = YandexContestInterface()
-    else:
+    elif args.mode == IRUNNER_MODE:
         test_system_interface = IRunnerInterface(args.irunner_report_json)
+    else:
+        test_system_interface = LocalInterface()
 
     config = configure(args.build_dir, args.dry_run)
     tester = config.create_tester(
-        enable_aggregation=not args.disable_aggregation)
+        enable_aggregation=not args.disable_aggregation,
+        time_limit_debug_mode=args.time_limit_debug)
     tester.run(test_system_interface, verbose=args.verbose_testing,
                print_report_to_stderr=args.print_report_to_stderr,
                print_test_config=args.print_test_config)

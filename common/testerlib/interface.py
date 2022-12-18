@@ -211,3 +211,11 @@ class IRunnerInterface(TestingSystemInterface):
                 'max_score': round(report.max_score),
                 'tests': tests,
             }, outfile)
+
+
+class LocalInterface(TestingSystemInterface):
+    def get_test_mode(self):
+        return self.ALL_TESTS_RUN
+
+    def write_report(self, report: TestingReport, print_stderr_report):
+        self._print_stderr_report(report)

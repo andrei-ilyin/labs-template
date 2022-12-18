@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Andrei Ilyin. All rights reserved.
+# Copyright (c) 2019-2022 Andrei Ilyin. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -37,20 +37,42 @@ from binary_wrapper import BinaryWrapper, maybe_add_exe_extension
 
 
 class GoogleTestRunner(TestRunner):
-    def __init__(self, test_binary_path, suitcase_to_tests, dry_run,
-                 editions, runs_count, check_token):
+    def __init__(self, test_binary_path, suitcase_to_tests, tests_order,
+                 dry_run, editions, heavy_tests_editions, runs_count,
+                 check_token):
         self._binary_wrappers = [
             BinaryWrapper(test_binary_path + edition, dry_run)
             for edition in editions
         ]
+        self._heavy_tests_binary_wrappers = [
+            BinaryWrapper(test_binary_path + edition, dry_run)
+            for edition in heavy_tests_editions
+        ]
         self._suitcase_to_tests = suitcase_to_tests
+        self._tests_order = tests_order
         self._runs_count = runs_count
         self._check_token = check_token and not dry_run
+        self._heavy_tests = []
+
+    # Mark the test to run only on heavy_tests_editions of the binary
+    def mark_heavy_test(self, full_test_name):
+        self._heavy_tests.append(full_test_name)
+
+    # Mark the tests in a suit to run only on heavy_tests_editions of the binary
+    def mark_heavy_suit(self, suit_name):
+        for test_name in self._suitcase_to_tests[suit_name]:
+            self.mark_heavy_test(suit_name + '.' + test_name)
 
     def run(self, description: TestDescription):
         full_test_name = description.suit_name + '.' + description.test_name
+
+        if full_test_name in self._heavy_tests:
+            wrappers = self._heavy_tests_binary_wrappers
+        else:
+            wrappers = self._binary_wrappers
+
         times_sec = []
-        for wrapper in self._binary_wrappers:
+        for wrapper in wrappers:
             with TemporaryDirectory(dir=os.curdir) as tmp:
                 GTEST_TOKEN_FILENAME = \
                     os.path.join(tmp, 'ANTI_CHEAT_TOKEN_FILENAME')
@@ -83,20 +105,20 @@ class GoogleTestRunner(TestRunner):
 
     def get_tests(self):
         result = []
-        for suit_name in self._suitcase_to_tests:
-            for test_name in self._suitcase_to_tests[suit_name]:
-                result.append(Test(
-                    TestDescription(
-                        suit_name=suit_name,
-                        test_name=test_name
-                    ),
-                    runner=self
-                ))
+        for (suit_name, test_name) in self._tests_order:
+            result.append(Test(
+                TestDescription(
+                    suit_name=suit_name,
+                    test_name=test_name
+                ),
+                runner=self
+            ))
         return result
 
 
 def prepare_google_test_runner(
-        test_binary_path, dry_run, editions=('',), runs_count=3):
+        test_binary_path, dry_run, editions=('',), heavy_tests_editions=None,
+        runs_count=3):
     sample_binary_path = maybe_add_exe_extension(test_binary_path + editions[0])
     if not os.path.exists(sample_binary_path):
         raise FileNotFoundError(
@@ -107,6 +129,7 @@ def prepare_google_test_runner(
     ).decode().split('\n')
 
     suitcase_to_tests = defaultdict(list)
+    tests_order = []
     current_tests_suitcase = ''
     for line in raw_tests_list:
         line = line.strip()
@@ -115,9 +138,13 @@ def prepare_google_test_runner(
         elif line[-1] == '.':
             current_tests_suitcase = line[:-1]
         else:
+            tests_order.append((current_tests_suitcase, line))
             suitcase_to_tests[current_tests_suitcase].append(line)
 
+    if heavy_tests_editions is None:
+        heavy_tests_editions = editions
+
     return GoogleTestRunner(
-        test_binary_path, suitcase_to_tests, dry_run, editions, runs_count,
-        check_token=True
+        test_binary_path, suitcase_to_tests, tests_order, dry_run, editions,
+        heavy_tests_editions, runs_count, check_token=True
     )

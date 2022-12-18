@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2020 Andrei Ilyin. All rights reserved.
+# Copyright (c) 2019-2022 Andrei Ilyin. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -68,8 +68,9 @@ class ProcessWithTimeout:
 
             thread.join(self.timeout)
             if thread.is_alive():
-                self.process.kill()
-                thread.join()
+                self.process.terminate()
+                thread.join(self.timeout)
+                assert (not thread.is_alive())
                 return (True, self.process.returncode)
 
             return (False, self.process.returncode)

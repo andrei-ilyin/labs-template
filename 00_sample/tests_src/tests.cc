@@ -60,4 +60,10 @@ SAFE_TEST(Foo, Failed) {
   }
 }
 
+SAFE_TEST(SomeOldTestSuite, Test) {
+  Foo foo(4242);
+  ASSERT_EQ(foo.GetValue(), 4242);
+}
+
+
 } // anonymous namespace
